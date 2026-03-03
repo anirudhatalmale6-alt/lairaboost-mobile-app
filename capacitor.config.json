@@ -1,0 +1,31 @@
+{
+  "appId": "com.lairaboost.app",
+  "appName": "Lairaboost",
+  "webDir": "www",
+  "server": {
+    "url": "https://lairaboost.com",
+    "cleartext": false
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 2000,
+      "launchAutoHide": true,
+      "backgroundColor": "#1a1c24",
+      "androidScaleType": "CENTER_CROP",
+      "showSpinner": false,
+      "splashFullScreen": true,
+      "splashImmersive": true
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#1a1c24"
+    }
+  },
+  "android": {
+    "allowMixedContent": false,
+    "backgroundColor": "#1a1c24"
+  },
+  "ios": {
+    "backgroundColor": "#1a1c24"
+  }
+}

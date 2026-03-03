@@ -1,0 +1,19 @@
+{
+  "name": "lairaboost-app",
+  "version": "1.0.0",
+  "description": "Lairaboost SMM Panel Mobile App",
+  "main": "index.js",
+  "scripts": {
+    "build": "echo build"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.2.0",
+    "@capacitor/core": "^6.2.0",
+    "@capacitor/ios": "^6.2.1",
+    "@capacitor/splash-screen": "^6.0.0",
+    "@capacitor/status-bar": "^6.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.2.0"
+  }
+}
