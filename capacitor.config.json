@@ -19,6 +19,9 @@
     "StatusBar": {
       "style": "DARK",
       "backgroundColor": "#1a1c24"
+    },
+    "PushNotifications": {
+      "presentationOptions": ["badge", "sound", "alert"]
     }
   },
   "android": {
