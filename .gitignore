@@ -1,3 +1,6 @@
 node_modules/
 android/app/build/
-.gradle/
+android/.gradle/
+ios/App/Pods/
+*.aab
+.DS_Store
