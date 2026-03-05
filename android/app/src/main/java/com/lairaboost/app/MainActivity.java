@@ -69,6 +69,7 @@ public class MainActivity extends BridgeActivity {
             setupPullToRefresh();
             setupOfflineView();
             setupNetworkMonitoring();
+            setupAdSenseInjection();
         });
     }
 
@@ -182,10 +183,12 @@ public class MainActivity extends BridgeActivity {
             case 1: // Home
                 webView.loadUrl("https://lairaboost.com");
                 setActiveTab(1);
+                webView.postDelayed(() -> injectAdSense(), 3000);
                 break;
             case 2: // Services
                 webView.loadUrl("https://lairaboost.com/services");
                 setActiveTab(2);
+                webView.postDelayed(() -> injectAdSense(), 3000);
                 break;
             case 3: // Share
                 String url = webView.getUrl();
@@ -355,6 +358,34 @@ public class MainActivity extends BridgeActivity {
                 });
             }
         });
+    }
+
+    // ─── AdSense Injection ──────────────────────────────────────
+
+    private static final String ADSENSE_JS =
+        "(function(){" +
+        "if(!document.querySelector('meta[name=\"google-adsense-account\"]')){" +
+        "var m=document.createElement('meta');" +
+        "m.name='google-adsense-account';" +
+        "m.content='ca-pub-7279544766670377';" +
+        "document.head.appendChild(m);}" +
+        "if(!document.querySelector('script[src*=\"adsbygoogle\"]')){" +
+        "var s=document.createElement('script');" +
+        "s.async=true;" +
+        "s.src='https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7279544766670377';" +
+        "s.crossOrigin='anonymous';" +
+        "document.head.appendChild(s);}" +
+        "})();";
+
+    private void setupAdSenseInjection() {
+        // Inject on initial page load (with delay for page to finish)
+        webView.postDelayed(() -> injectAdSense(), 3000);
+    }
+
+    private void injectAdSense() {
+        if (webView != null) {
+            webView.evaluateJavascript(ADSENSE_JS, null);
+        }
     }
 
     // ─── Helpers ────────────────────────────────────────────────
