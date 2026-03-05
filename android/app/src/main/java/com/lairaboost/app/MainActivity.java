@@ -2,7 +2,11 @@ package com.lairaboost.app;
 
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
+import android.content.res.ColorStateList;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
@@ -14,7 +18,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.WebView;
 import android.widget.FrameLayout;
-import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -28,10 +32,15 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
 
     private static final int BRAND_COLOR = Color.parseColor("#1a1c24");
-    private static final int ACCENT_COLOR = Color.parseColor("#3B82F6");
-    private static final int TOOLBAR_HEIGHT_DP = 50;
+    private static final int BRAND_SURFACE = Color.parseColor("#242630");
+    private static final int ACCENT_GREEN = Color.parseColor("#10B981");
+    private static final int ACCENT_BLUE = Color.parseColor("#3B82F6");
+    private static final int ICON_DEFAULT = Color.parseColor("#BFBFBF");
+    private static final int ICON_INACTIVE = Color.parseColor("#595959");
+    private static final int TOOLBAR_HEIGHT_DP = 60;
 
-    private ImageButton backBtn, forwardBtn, shareBtn, refreshBtn;
+    private LinearLayout backItem, forwardItem, homeItem, shareItem, refreshItem;
+    private ImageView backIcon, forwardIcon, homeIcon, shareIcon, refreshIcon;
     private View offlineOverlay;
     private SwipeRefreshLayout swipeRefresh;
     private WebView webView;
@@ -59,50 +68,58 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
-    // ─── Bottom Toolbar ─────────────────────────────────────────
+    // ─── Modern Bottom Navigation Bar ────────────────────────────
 
     private void setupToolbar() {
-        int toolbarHeightPx = dpToPx(TOOLBAR_HEIGHT_DP);
+        int toolbarPx = dpToPx(TOOLBAR_HEIGHT_DP);
 
         ViewGroup contentView = findViewById(android.R.id.content);
         ViewGroup rootLayout = (ViewGroup) contentView.getChildAt(0);
 
-        // Create toolbar
+        // Main toolbar container
         LinearLayout toolbar = new LinearLayout(this);
         toolbar.setOrientation(LinearLayout.HORIZONTAL);
-        toolbar.setBackgroundColor(BRAND_COLOR);
+        toolbar.setBackgroundColor(BRAND_SURFACE);
         toolbar.setGravity(Gravity.CENTER_VERTICAL);
+        toolbar.setElevation(dpToPx(8));
 
-        // Create navigation buttons with vector drawables
-        backBtn = makeToolbarButton(R.drawable.ic_nav_back);
-        forwardBtn = makeToolbarButton(R.drawable.ic_nav_forward);
-        shareBtn = makeToolbarButton(R.drawable.ic_nav_share);
-        refreshBtn = makeToolbarButton(R.drawable.ic_nav_refresh);
+        // Build nav items: Back, Forward, Home, Share, Reload
+        backItem = makeNavItem(R.drawable.ic_nav_back, "Back");
+        forwardItem = makeNavItem(R.drawable.ic_nav_forward, "Forward");
+        homeItem = makeNavItem(R.drawable.ic_nav_home, "Home");
+        shareItem = makeNavItem(R.drawable.ic_nav_share, "Share");
+        refreshItem = makeNavItem(R.drawable.ic_nav_refresh, "Reload");
 
-        LinearLayout.LayoutParams btnParams = new LinearLayout.LayoutParams(
+        // Get icon refs (tag 100)
+        backIcon = (ImageView) backItem.findViewWithTag("icon");
+        forwardIcon = (ImageView) forwardItem.findViewWithTag("icon");
+        homeIcon = (ImageView) homeItem.findViewWithTag("icon");
+        shareIcon = (ImageView) shareItem.findViewWithTag("icon");
+        refreshIcon = (ImageView) refreshItem.findViewWithTag("icon");
+
+        LinearLayout.LayoutParams itemParams = new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.MATCH_PARENT, 1f
         );
 
-        toolbar.addView(backBtn, btnParams);
-        toolbar.addView(forwardBtn, btnParams);
-        toolbar.addView(shareBtn, btnParams);
-        toolbar.addView(refreshBtn, btnParams);
+        toolbar.addView(backItem, itemParams);
+        toolbar.addView(forwardItem, itemParams);
+        toolbar.addView(homeItem, itemParams);
+        toolbar.addView(shareItem, itemParams);
+        toolbar.addView(refreshItem, itemParams);
 
-        // Wrapper with top border
+        // Wrapper: thin separator line + toolbar
         LinearLayout wrapper = new LinearLayout(this);
         wrapper.setOrientation(LinearLayout.VERTICAL);
-        wrapper.setBackgroundColor(BRAND_COLOR);
 
-        View topBorder = new View(this);
-        topBorder.setBackgroundColor(Color.argb(40, 255, 255, 255));
-        wrapper.addView(topBorder, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dpToPx(1)
+        View sep = new View(this);
+        sep.setBackgroundColor(Color.argb(20, 255, 255, 255));
+        wrapper.addView(sep, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 1
         ));
         wrapper.addView(toolbar, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, toolbarHeightPx
+                LinearLayout.LayoutParams.MATCH_PARENT, toolbarPx
         ));
 
-        // Add to root at bottom
         CoordinatorLayout.LayoutParams params = new CoordinatorLayout.LayoutParams(
                 CoordinatorLayout.LayoutParams.MATCH_PARENT,
                 CoordinatorLayout.LayoutParams.WRAP_CONTENT
@@ -110,22 +127,23 @@ public class MainActivity extends BridgeActivity {
         params.gravity = Gravity.BOTTOM;
         rootLayout.addView(wrapper, params);
 
-        // Add bottom margin to WebView
+        // Adjust WebView margin
         ViewGroup.MarginLayoutParams webParams =
                 (ViewGroup.MarginLayoutParams) webView.getLayoutParams();
-        webParams.bottomMargin = toolbarHeightPx + dpToPx(1);
+        webParams.bottomMargin = toolbarPx + 1;
         webView.setLayoutParams(webParams);
 
-        // Set actions
-        backBtn.setOnClickListener(v -> {
+        // Actions
+        backItem.setOnClickListener(v -> {
             if (webView.canGoBack()) webView.goBack();
             updateNavButtons();
         });
-        forwardBtn.setOnClickListener(v -> {
+        forwardItem.setOnClickListener(v -> {
             if (webView.canGoForward()) webView.goForward();
             updateNavButtons();
         });
-        shareBtn.setOnClickListener(v -> {
+        homeItem.setOnClickListener(v -> webView.loadUrl("https://lairaboost.com"));
+        shareItem.setOnClickListener(v -> {
             String url = webView.getUrl();
             if (url != null) {
                 Intent shareIntent = new Intent(Intent.ACTION_SEND);
@@ -134,25 +152,79 @@ public class MainActivity extends BridgeActivity {
                 startActivity(Intent.createChooser(shareIntent, "Share via"));
             }
         });
-        refreshBtn.setOnClickListener(v -> webView.reload());
+        refreshItem.setOnClickListener(v -> webView.reload());
+
+        // Home is highlighted
+        homeIcon.setColorFilter(ACCENT_GREEN);
+        TextView homeLbl = (TextView) homeItem.findViewWithTag("label");
+        if (homeLbl != null) homeLbl.setTextColor(ACCENT_GREEN);
 
         updateNavButtons();
     }
 
-    private ImageButton makeToolbarButton(int drawableRes) {
-        ImageButton btn = new ImageButton(this);
-        btn.setBackgroundColor(Color.TRANSPARENT);
-        btn.setImageDrawable(ContextCompat.getDrawable(this, drawableRes));
-        btn.setScaleType(ImageButton.ScaleType.CENTER);
-        btn.setPadding(dpToPx(12), dpToPx(12), dpToPx(12), dpToPx(12));
-        return btn;
+    private LinearLayout makeNavItem(int drawableRes, String label) {
+        LinearLayout item = new LinearLayout(this);
+        item.setOrientation(LinearLayout.VERTICAL);
+        item.setGravity(Gravity.CENTER);
+        item.setPadding(0, dpToPx(6), 0, dpToPx(6));
+
+        // Ripple effect
+        RippleDrawable ripple = new RippleDrawable(
+                ColorStateList.valueOf(Color.argb(30, 255, 255, 255)),
+                null, new ColorDrawable(Color.WHITE)
+        );
+        item.setBackground(ripple);
+        item.setClickable(true);
+        item.setFocusable(true);
+
+        // Icon
+        ImageView icon = new ImageView(this);
+        icon.setImageDrawable(ContextCompat.getDrawable(this, drawableRes));
+        icon.setColorFilter(ICON_DEFAULT);
+        icon.setTag("icon");
+
+        LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(
+                dpToPx(22), dpToPx(22)
+        );
+        iconParams.gravity = Gravity.CENTER;
+
+        // Label
+        TextView lbl = new TextView(this);
+        lbl.setText(label);
+        lbl.setTextColor(ICON_DEFAULT);
+        lbl.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
+        lbl.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        lbl.setGravity(Gravity.CENTER);
+        lbl.setTag("label");
+
+        LinearLayout.LayoutParams lblParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        lblParams.topMargin = dpToPx(2);
+        lblParams.gravity = Gravity.CENTER;
+
+        item.addView(icon, iconParams);
+        item.addView(lbl, lblParams);
+
+        return item;
     }
 
     private void updateNavButtons() {
-        if (webView != null && backBtn != null) {
-            backBtn.setAlpha(webView.canGoBack() ? 1.0f : 0.35f);
-            forwardBtn.setAlpha(webView.canGoForward() ? 1.0f : 0.35f);
-        }
+        if (webView == null || backIcon == null) return;
+
+        boolean canBack = webView.canGoBack();
+        boolean canFwd = webView.canGoForward();
+
+        backIcon.setColorFilter(canBack ? ICON_DEFAULT : ICON_INACTIVE);
+        forwardIcon.setColorFilter(canFwd ? ICON_DEFAULT : ICON_INACTIVE);
+        backItem.setAlpha(canBack ? 1.0f : 0.5f);
+        forwardItem.setAlpha(canFwd ? 1.0f : 0.5f);
+
+        TextView backLbl = (TextView) backItem.findViewWithTag("label");
+        TextView fwdLbl = (TextView) forwardItem.findViewWithTag("label");
+        if (backLbl != null) backLbl.setTextColor(canBack ? ICON_DEFAULT : ICON_INACTIVE);
+        if (fwdLbl != null) fwdLbl.setTextColor(canFwd ? ICON_DEFAULT : ICON_INACTIVE);
     }
 
     // ─── Pull to Refresh ────────────────────────────────────────
@@ -169,8 +241,8 @@ public class MainActivity extends BridgeActivity {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
         ));
-        swipeRefresh.setColorSchemeColors(ACCENT_COLOR);
-        swipeRefresh.setProgressBackgroundColorSchemeColor(BRAND_COLOR);
+        swipeRefresh.setColorSchemeColors(ACCENT_GREEN);
+        swipeRefresh.setProgressBackgroundColorSchemeColor(BRAND_SURFACE);
         swipeRefresh.setOnRefreshListener(() -> {
             webView.reload();
             webView.postDelayed(() -> swipeRefresh.setRefreshing(false), 2000);
@@ -191,31 +263,30 @@ public class MainActivity extends BridgeActivity {
         container.setGravity(Gravity.CENTER);
         container.setPadding(dpToPx(32), 0, dpToPx(32), 0);
 
-        // Title
         TextView title = new TextView(this);
         title.setText("No Internet Connection");
         title.setTextColor(Color.WHITE);
         title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
+        title.setTypeface(Typeface.create("sans-serif", Typeface.BOLD));
         title.setGravity(Gravity.CENTER);
         title.setPadding(0, dpToPx(24), 0, dpToPx(8));
 
-        // Subtitle
         TextView subtitle = new TextView(this);
         subtitle.setText("Check your connection and try again");
         subtitle.setTextColor(Color.argb(128, 255, 255, 255));
         subtitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
         subtitle.setGravity(Gravity.CENTER);
 
-        // Retry button
         TextView retryBtn = new TextView(this);
         retryBtn.setText("Retry");
         retryBtn.setTextColor(Color.WHITE);
         retryBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        retryBtn.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         retryBtn.setGravity(Gravity.CENTER);
         retryBtn.setPadding(dpToPx(40), dpToPx(12), dpToPx(40), dpToPx(12));
 
         GradientDrawable retryBg = new GradientDrawable();
-        retryBg.setColor(ACCENT_COLOR);
+        retryBg.setColor(ACCENT_GREEN);
         retryBg.setCornerRadius(dpToPx(22));
         retryBtn.setBackground(retryBg);
 

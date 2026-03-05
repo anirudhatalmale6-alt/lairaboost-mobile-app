@@ -6,11 +6,12 @@ import Network
 class LairaboostViewController: CAPBridgeViewController {
 
     // MARK: - UI Elements
-    private var navToolbar: UIView!
+    private var navToolbar: UIVisualEffectView!
     private var backBtn: UIButton!
     private var forwardBtn: UIButton!
     private var shareBtn: UIButton!
     private var refreshBtn: UIButton!
+    private var homeBtn: UIButton!
     private var offlineOverlay: UIView!
     private var refreshControl: UIRefreshControl!
 
@@ -19,15 +20,17 @@ class LairaboostViewController: CAPBridgeViewController {
     private var isOnline = true
 
     // MARK: - Constants
-    private let toolbarHeight: CGFloat = 50
+    private let toolbarHeight: CGFloat = 56
     private let brandBg = UIColor(red: 26/255.0, green: 28/255.0, blue: 36/255.0, alpha: 1)
+    private let accentGreen = UIColor(red: 16/255.0, green: 185/255.0, blue: 129/255.0, alpha: 1)
     private let accentBlue = UIColor(red: 59/255.0, green: 130/255.0, blue: 246/255.0, alpha: 1)
+    private let iconColor = UIColor(white: 0.75, alpha: 1)
+    private let iconActiveColor = UIColor.white
 
     // MARK: - Lifecycle
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        // webView is ready after super.viewDidLoad()
         webView?.scrollView.bounces = true
         setupBottomToolbar()
         setupPullToRefresh()
@@ -42,30 +45,33 @@ class LairaboostViewController: CAPBridgeViewController {
         updateScrollInsets()
     }
 
-    // MARK: - Bottom Toolbar
+    // MARK: - Modern Bottom Toolbar
 
     private func setupBottomToolbar() {
-        navToolbar = UIView()
-        navToolbar.backgroundColor = brandBg
+        // Frosted glass blur effect
+        let blur = UIBlurEffect(style: .systemChromeMaterialDark)
+        navToolbar = UIVisualEffectView(effect: blur)
         navToolbar.translatesAutoresizingMaskIntoConstraints = false
 
-        // Top separator line
+        // Top hairline separator
         let sep = UIView()
-        sep.backgroundColor = UIColor.white.withAlphaComponent(0.15)
+        sep.backgroundColor = UIColor.white.withAlphaComponent(0.08)
         sep.translatesAutoresizingMaskIntoConstraints = false
-        navToolbar.addSubview(sep)
+        navToolbar.contentView.addSubview(sep)
 
-        // Create buttons
-        backBtn = makeNavButton(systemName: "chevron.left", action: #selector(tapBack))
-        forwardBtn = makeNavButton(systemName: "chevron.right", action: #selector(tapForward))
-        shareBtn = makeNavButton(systemName: "square.and.arrow.up", action: #selector(tapShare))
-        refreshBtn = makeNavButton(systemName: "arrow.clockwise", action: #selector(tapRefresh))
+        // Create buttons with labels
+        backBtn = makeNavButton(iconName: "chevron.left", label: "Back", action: #selector(tapBack))
+        forwardBtn = makeNavButton(iconName: "chevron.right", label: "Forward", action: #selector(tapForward))
+        homeBtn = makeNavButton(iconName: "house.fill", label: "Home", action: #selector(tapHome))
+        shareBtn = makeNavButton(iconName: "square.and.arrow.up", label: "Share", action: #selector(tapShare))
+        refreshBtn = makeNavButton(iconName: "arrow.clockwise", label: "Reload", action: #selector(tapRefresh))
 
-        let stack = UIStackView(arrangedSubviews: [backBtn, forwardBtn, shareBtn, refreshBtn])
+        let stack = UIStackView(arrangedSubviews: [backBtn, forwardBtn, homeBtn, shareBtn, refreshBtn])
         stack.axis = .horizontal
         stack.distribution = .fillEqually
+        stack.alignment = .center
         stack.translatesAutoresizingMaskIntoConstraints = false
-        navToolbar.addSubview(stack)
+        navToolbar.contentView.addSubview(stack)
 
         view.addSubview(navToolbar)
 
@@ -73,12 +79,12 @@ class LairaboostViewController: CAPBridgeViewController {
             sep.topAnchor.constraint(equalTo: navToolbar.topAnchor),
             sep.leadingAnchor.constraint(equalTo: navToolbar.leadingAnchor),
             sep.trailingAnchor.constraint(equalTo: navToolbar.trailingAnchor),
-            sep.heightAnchor.constraint(equalToConstant: 0.5),
+            sep.heightAnchor.constraint(equalToConstant: 0.33),
 
-            stack.topAnchor.constraint(equalTo: navToolbar.topAnchor),
-            stack.leadingAnchor.constraint(equalTo: navToolbar.leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: navToolbar.trailingAnchor),
-            stack.heightAnchor.constraint(equalToConstant: toolbarHeight),
+            stack.topAnchor.constraint(equalTo: navToolbar.contentView.topAnchor, constant: 4),
+            stack.leadingAnchor.constraint(equalTo: navToolbar.contentView.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: navToolbar.contentView.trailingAnchor),
+            stack.heightAnchor.constraint(equalToConstant: toolbarHeight - 4),
 
             navToolbar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             navToolbar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -89,11 +95,41 @@ class LairaboostViewController: CAPBridgeViewController {
         updateNavButtons()
     }
 
-    private func makeNavButton(systemName: String, action: Selector) -> UIButton {
-        let btn = UIButton(type: .system)
-        let config = UIImage.SymbolConfiguration(pointSize: 20, weight: .medium)
-        btn.setImage(UIImage(systemName: systemName, withConfiguration: config), for: .normal)
-        btn.tintColor = .white
+    private func makeNavButton(iconName: String, label: String, action: Selector) -> UIButton {
+        let btn = UIButton(type: .custom)
+
+        // Icon
+        let iconConfig = UIImage.SymbolConfiguration(pointSize: 18, weight: .medium)
+        let iconView = UIImageView(image: UIImage(systemName: iconName, withConfiguration: iconConfig))
+        iconView.tintColor = iconColor
+        iconView.contentMode = .scaleAspectFit
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+        iconView.tag = 100
+
+        // Label
+        let lbl = UILabel()
+        lbl.text = label
+        lbl.font = .systemFont(ofSize: 10, weight: .medium)
+        lbl.textColor = iconColor
+        lbl.textAlignment = .center
+        lbl.translatesAutoresizingMaskIntoConstraints = false
+        lbl.tag = 200
+
+        let stack = UIStackView(arrangedSubviews: [iconView, lbl])
+        stack.axis = .vertical
+        stack.alignment = .center
+        stack.spacing = 3
+        stack.isUserInteractionEnabled = false
+        stack.translatesAutoresizingMaskIntoConstraints = false
+
+        btn.addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            iconView.heightAnchor.constraint(equalToConstant: 22),
+            stack.centerXAnchor.constraint(equalTo: btn.centerXAnchor),
+            stack.centerYAnchor.constraint(equalTo: btn.centerYAnchor)
+        ])
+
         btn.addTarget(self, action: action, for: .touchUpInside)
         return btn
     }
@@ -103,8 +139,22 @@ class LairaboostViewController: CAPBridgeViewController {
         let canFwd = webView?.canGoForward ?? false
         backBtn?.isEnabled = canBack
         forwardBtn?.isEnabled = canFwd
-        backBtn?.alpha = canBack ? 1.0 : 0.35
-        forwardBtn?.alpha = canFwd ? 1.0 : 0.35
+        setButtonAppearance(backBtn, active: canBack)
+        setButtonAppearance(forwardBtn, active: canFwd)
+        setButtonAppearance(homeBtn, active: true, highlight: true)
+        setButtonAppearance(shareBtn, active: true)
+        setButtonAppearance(refreshBtn, active: true)
+    }
+
+    private func setButtonAppearance(_ btn: UIButton?, active: Bool, highlight: Bool = false) {
+        guard let btn = btn else { return }
+        let color = highlight ? accentGreen : (active ? iconActiveColor : UIColor(white: 0.35, alpha: 1))
+        if let iconView = btn.viewWithTag(100) as? UIImageView {
+            iconView.tintColor = color
+        }
+        if let lbl = btn.viewWithTag(200) as? UILabel {
+            lbl.textColor = color
+        }
     }
 
     // MARK: - Toolbar Actions
@@ -115,6 +165,12 @@ class LairaboostViewController: CAPBridgeViewController {
 
     @objc private func tapForward() {
         webView?.goForward()
+    }
+
+    @objc private func tapHome() {
+        if let url = URL(string: "https://lairaboost.com") {
+            webView?.load(URLRequest(url: url))
+        }
     }
 
     @objc private func tapShare() {
@@ -129,6 +185,8 @@ class LairaboostViewController: CAPBridgeViewController {
     }
 
     @objc private func tapRefresh() {
+        let generator = UIImpactFeedbackGenerator(style: .light)
+        generator.impactOccurred()
         webView?.reload()
     }
 
@@ -137,7 +195,7 @@ class LairaboostViewController: CAPBridgeViewController {
     private func setupPullToRefresh() {
         guard let scrollView = webView?.scrollView else { return }
         refreshControl = UIRefreshControl()
-        refreshControl.tintColor = .white
+        refreshControl.tintColor = accentGreen
         refreshControl.addTarget(self, action: #selector(handlePullRefresh), for: .valueChanged)
         scrollView.refreshControl = refreshControl
     }
@@ -182,7 +240,7 @@ class LairaboostViewController: CAPBridgeViewController {
         let retryBtn = UIButton(type: .system)
         retryBtn.setTitle("Retry", for: .normal)
         retryBtn.setTitleColor(.white, for: .normal)
-        retryBtn.backgroundColor = accentBlue
+        retryBtn.backgroundColor = accentGreen
         retryBtn.layer.cornerRadius = 22
         retryBtn.titleLabel?.font = .systemFont(ofSize: 16, weight: .semibold)
         retryBtn.contentEdgeInsets = UIEdgeInsets(top: 12, left: 40, bottom: 12, right: 40)
