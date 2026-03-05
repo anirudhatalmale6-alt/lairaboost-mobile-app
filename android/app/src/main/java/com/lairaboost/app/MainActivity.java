@@ -1,12 +1,12 @@
 package com.lairaboost.app;
 
 import android.content.Intent;
+import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
-import android.content.res.ColorStateList;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
@@ -31,20 +31,33 @@ import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
 
-    private static final int BRAND_COLOR = Color.parseColor("#1a1c24");
-    private static final int BRAND_SURFACE = Color.parseColor("#242630");
+    private static final int BRAND_BG = Color.parseColor("#12141C");
+    private static final int TAB_BAR_BG = Color.parseColor("#12141C");
     private static final int ACCENT_GREEN = Color.parseColor("#10B981");
-    private static final int ACCENT_BLUE = Color.parseColor("#3B82F6");
-    private static final int ICON_DEFAULT = Color.parseColor("#BFBFBF");
-    private static final int ICON_INACTIVE = Color.parseColor("#595959");
-    private static final int TOOLBAR_HEIGHT_DP = 60;
+    private static final int DEFAULT_GRAY = Color.parseColor("#8C8C9B");
+    private static final int DIM_GRAY = Color.parseColor("#3C3C46");
+    private static final int TOOLBAR_HEIGHT_DP = 64;
 
-    private LinearLayout backItem, forwardItem, homeItem, shareItem, refreshItem;
-    private ImageView backIcon, forwardIcon, homeIcon, shareIcon, refreshIcon;
+    // Tab items
+    private LinearLayout[] tabItems = new LinearLayout[5];
+    private ImageView[] tabIcons = new ImageView[5];
+    private TextView[] tabLabels = new TextView[5];
+    private int activeTab = 1; // Home
+
     private View offlineOverlay;
     private SwipeRefreshLayout swipeRefresh;
     private WebView webView;
     private boolean isOnline = true;
+
+    // Tab config: iconRes, iconActiveRes, label
+    private static final int[][] TAB_ICONS = {
+        {R.drawable.ic_nav_back, R.drawable.ic_nav_back},
+        {R.drawable.ic_nav_home, R.drawable.ic_nav_home_filled},
+        {R.drawable.ic_nav_services, R.drawable.ic_nav_services_filled},
+        {R.drawable.ic_nav_share, R.drawable.ic_nav_share},
+        {R.drawable.ic_nav_refresh, R.drawable.ic_nav_refresh},
+    };
+    private static final String[] TAB_LABELS = {"Back", "Home", "Services", "Share", "Reload"};
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -52,7 +65,7 @@ public class MainActivity extends BridgeActivity {
 
         getBridge().getWebView().post(() -> {
             webView = getBridge().getWebView();
-            setupToolbar();
+            setupTabBar();
             setupPullToRefresh();
             setupOfflineView();
             setupNetworkMonitoring();
@@ -68,57 +81,33 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
-    // ─── Modern Bottom Navigation Bar ────────────────────────────
+    // ─── Modern Tab Bar ─────────────────────────────────────────
 
-    private void setupToolbar() {
+    private void setupTabBar() {
         int toolbarPx = dpToPx(TOOLBAR_HEIGHT_DP);
 
         ViewGroup contentView = findViewById(android.R.id.content);
         ViewGroup rootLayout = (ViewGroup) contentView.getChildAt(0);
 
-        // Main toolbar container
-        LinearLayout toolbar = new LinearLayout(this);
-        toolbar.setOrientation(LinearLayout.HORIZONTAL);
-        toolbar.setBackgroundColor(BRAND_SURFACE);
-        toolbar.setGravity(Gravity.CENTER_VERTICAL);
-        toolbar.setElevation(dpToPx(8));
+        LinearLayout tabBar = new LinearLayout(this);
+        tabBar.setOrientation(LinearLayout.HORIZONTAL);
+        tabBar.setBackgroundColor(TAB_BAR_BG);
+        tabBar.setElevation(dpToPx(12));
 
-        // Build nav items: Back, Forward, Home, Share, Reload
-        backItem = makeNavItem(R.drawable.ic_nav_back, "Back");
-        forwardItem = makeNavItem(R.drawable.ic_nav_forward, "Forward");
-        homeItem = makeNavItem(R.drawable.ic_nav_home, "Home");
-        shareItem = makeNavItem(R.drawable.ic_nav_share, "Share");
-        refreshItem = makeNavItem(R.drawable.ic_nav_refresh, "Reload");
+        for (int i = 0; i < 5; i++) {
+            tabItems[i] = createTabItem(i, TAB_ICONS[i][0], TAB_LABELS[i]);
+            LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f);
+            tabBar.addView(tabItems[i], p);
+        }
 
-        // Get icon refs (tag 100)
-        backIcon = (ImageView) backItem.findViewWithTag("icon");
-        forwardIcon = (ImageView) forwardItem.findViewWithTag("icon");
-        homeIcon = (ImageView) homeItem.findViewWithTag("icon");
-        shareIcon = (ImageView) shareItem.findViewWithTag("icon");
-        refreshIcon = (ImageView) refreshItem.findViewWithTag("icon");
-
-        LinearLayout.LayoutParams itemParams = new LinearLayout.LayoutParams(
-                0, LinearLayout.LayoutParams.MATCH_PARENT, 1f
-        );
-
-        toolbar.addView(backItem, itemParams);
-        toolbar.addView(forwardItem, itemParams);
-        toolbar.addView(homeItem, itemParams);
-        toolbar.addView(shareItem, itemParams);
-        toolbar.addView(refreshItem, itemParams);
-
-        // Wrapper: thin separator line + toolbar
+        // Wrapper: separator + tab bar
         LinearLayout wrapper = new LinearLayout(this);
         wrapper.setOrientation(LinearLayout.VERTICAL);
 
         View sep = new View(this);
-        sep.setBackgroundColor(Color.argb(20, 255, 255, 255));
-        wrapper.addView(sep, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, 1
-        ));
-        wrapper.addView(toolbar, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, toolbarPx
-        ));
+        sep.setBackgroundColor(Color.argb(15, 255, 255, 255));
+        wrapper.addView(sep, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1));
+        wrapper.addView(tabBar, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, toolbarPx));
 
         CoordinatorLayout.LayoutParams params = new CoordinatorLayout.LayoutParams(
                 CoordinatorLayout.LayoutParams.MATCH_PARENT,
@@ -127,50 +116,24 @@ public class MainActivity extends BridgeActivity {
         params.gravity = Gravity.BOTTOM;
         rootLayout.addView(wrapper, params);
 
-        // Adjust WebView margin
-        ViewGroup.MarginLayoutParams webParams =
-                (ViewGroup.MarginLayoutParams) webView.getLayoutParams();
+        // WebView margin
+        ViewGroup.MarginLayoutParams webParams = (ViewGroup.MarginLayoutParams) webView.getLayoutParams();
         webParams.bottomMargin = toolbarPx + 1;
         webView.setLayoutParams(webParams);
 
-        // Actions
-        backItem.setOnClickListener(v -> {
-            if (webView.canGoBack()) webView.goBack();
-            updateNavButtons();
-        });
-        forwardItem.setOnClickListener(v -> {
-            if (webView.canGoForward()) webView.goForward();
-            updateNavButtons();
-        });
-        homeItem.setOnClickListener(v -> webView.loadUrl("https://lairaboost.com"));
-        shareItem.setOnClickListener(v -> {
-            String url = webView.getUrl();
-            if (url != null) {
-                Intent shareIntent = new Intent(Intent.ACTION_SEND);
-                shareIntent.setType("text/plain");
-                shareIntent.putExtra(Intent.EXTRA_TEXT, url);
-                startActivity(Intent.createChooser(shareIntent, "Share via"));
-            }
-        });
-        refreshItem.setOnClickListener(v -> webView.reload());
-
-        // Home is highlighted
-        homeIcon.setColorFilter(ACCENT_GREEN);
-        TextView homeLbl = (TextView) homeItem.findViewWithTag("label");
-        if (homeLbl != null) homeLbl.setTextColor(ACCENT_GREEN);
-
-        updateNavButtons();
+        // Set initial state
+        setActiveTab(1);
     }
 
-    private LinearLayout makeNavItem(int drawableRes, String label) {
+    private LinearLayout createTabItem(int index, int iconRes, String label) {
         LinearLayout item = new LinearLayout(this);
         item.setOrientation(LinearLayout.VERTICAL);
         item.setGravity(Gravity.CENTER);
-        item.setPadding(0, dpToPx(6), 0, dpToPx(6));
+        item.setPadding(0, dpToPx(8), 0, dpToPx(8));
 
-        // Ripple effect
+        // Ripple
         RippleDrawable ripple = new RippleDrawable(
-                ColorStateList.valueOf(Color.argb(30, 255, 255, 255)),
+                ColorStateList.valueOf(Color.argb(20, 255, 255, 255)),
                 null, new ColorDrawable(Color.WHITE)
         );
         item.setBackground(ripple);
@@ -179,52 +142,94 @@ public class MainActivity extends BridgeActivity {
 
         // Icon
         ImageView icon = new ImageView(this);
-        icon.setImageDrawable(ContextCompat.getDrawable(this, drawableRes));
-        icon.setColorFilter(ICON_DEFAULT);
-        icon.setTag("icon");
+        icon.setImageDrawable(ContextCompat.getDrawable(this, iconRes));
+        icon.setColorFilter(DEFAULT_GRAY);
+        tabIcons[index] = icon;
 
-        LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(
-                dpToPx(22), dpToPx(22)
-        );
-        iconParams.gravity = Gravity.CENTER;
+        LinearLayout.LayoutParams iconP = new LinearLayout.LayoutParams(dpToPx(26), dpToPx(26));
+        iconP.gravity = Gravity.CENTER;
 
         // Label
         TextView lbl = new TextView(this);
         lbl.setText(label);
-        lbl.setTextColor(ICON_DEFAULT);
+        lbl.setTextColor(DEFAULT_GRAY);
         lbl.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
         lbl.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         lbl.setGravity(Gravity.CENTER);
-        lbl.setTag("label");
+        tabLabels[index] = lbl;
 
-        LinearLayout.LayoutParams lblParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
+        LinearLayout.LayoutParams lblP = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
         );
-        lblParams.topMargin = dpToPx(2);
-        lblParams.gravity = Gravity.CENTER;
+        lblP.topMargin = dpToPx(4);
+        lblP.gravity = Gravity.CENTER;
 
-        item.addView(icon, iconParams);
-        item.addView(lbl, lblParams);
+        item.addView(icon, iconP);
+        item.addView(lbl, lblP);
+
+        final int idx = index;
+        item.setOnClickListener(v -> onTabClick(idx));
 
         return item;
     }
 
-    private void updateNavButtons() {
-        if (webView == null || backIcon == null) return;
+    private void onTabClick(int index) {
+        switch (index) {
+            case 0: // Back
+                if (webView.canGoBack()) webView.goBack();
+                updateBackButton();
+                break;
+            case 1: // Home
+                webView.loadUrl("https://lairaboost.com");
+                setActiveTab(1);
+                break;
+            case 2: // Services
+                webView.loadUrl("https://lairaboost.com/services");
+                setActiveTab(2);
+                break;
+            case 3: // Share
+                String url = webView.getUrl();
+                if (url != null) {
+                    Intent shareIntent = new Intent(Intent.ACTION_SEND);
+                    shareIntent.setType("text/plain");
+                    shareIntent.putExtra(Intent.EXTRA_TEXT, url);
+                    startActivity(Intent.createChooser(shareIntent, "Share via"));
+                }
+                break;
+            case 4: // Reload
+                webView.reload();
+                break;
+        }
+    }
 
-        boolean canBack = webView.canGoBack();
-        boolean canFwd = webView.canGoForward();
+    private void setActiveTab(int index) {
+        activeTab = index;
+        for (int i = 0; i < 5; i++) {
+            boolean isActive = (i == index);
 
-        backIcon.setColorFilter(canBack ? ICON_DEFAULT : ICON_INACTIVE);
-        forwardIcon.setColorFilter(canFwd ? ICON_DEFAULT : ICON_INACTIVE);
-        backItem.setAlpha(canBack ? 1.0f : 0.5f);
-        forwardItem.setAlpha(canFwd ? 1.0f : 0.5f);
+            if (i == 0) {
+                updateBackButton();
+                continue;
+            }
 
-        TextView backLbl = (TextView) backItem.findViewWithTag("label");
-        TextView fwdLbl = (TextView) forwardItem.findViewWithTag("label");
-        if (backLbl != null) backLbl.setTextColor(canBack ? ICON_DEFAULT : ICON_INACTIVE);
-        if (fwdLbl != null) fwdLbl.setTextColor(canFwd ? ICON_DEFAULT : ICON_INACTIVE);
+            int iconRes = isActive ? TAB_ICONS[i][1] : TAB_ICONS[i][0];
+            int color = isActive ? ACCENT_GREEN : DEFAULT_GRAY;
+
+            tabIcons[i].setImageDrawable(ContextCompat.getDrawable(this, iconRes));
+            tabIcons[i].setColorFilter(color);
+            tabLabels[i].setTextColor(color);
+            tabLabels[i].setTypeface(Typeface.create(
+                    isActive ? "sans-serif-bold" : "sans-serif-medium", Typeface.NORMAL
+            ));
+        }
+    }
+
+    private void updateBackButton() {
+        boolean canBack = webView != null && webView.canGoBack();
+        int color = canBack ? DEFAULT_GRAY : DIM_GRAY;
+        tabIcons[0].setColorFilter(color);
+        tabLabels[0].setTextColor(color);
+        tabItems[0].setAlpha(canBack ? 1.0f : 0.6f);
     }
 
     // ─── Pull to Refresh ────────────────────────────────────────
@@ -238,11 +243,10 @@ public class MainActivity extends BridgeActivity {
 
         swipeRefresh = new SwipeRefreshLayout(this);
         swipeRefresh.addView(webView, new ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
         ));
         swipeRefresh.setColorSchemeColors(ACCENT_GREEN);
-        swipeRefresh.setProgressBackgroundColorSchemeColor(BRAND_SURFACE);
+        swipeRefresh.setProgressBackgroundColorSchemeColor(TAB_BAR_BG);
         swipeRefresh.setOnRefreshListener(() -> {
             webView.reload();
             webView.postDelayed(() -> swipeRefresh.setRefreshing(false), 2000);
@@ -255,7 +259,7 @@ public class MainActivity extends BridgeActivity {
 
     private void setupOfflineView() {
         FrameLayout overlay = new FrameLayout(this);
-        overlay.setBackgroundColor(BRAND_COLOR);
+        overlay.setBackgroundColor(BRAND_BG);
         overlay.setVisibility(View.GONE);
 
         LinearLayout container = new LinearLayout(this);
@@ -283,38 +287,34 @@ public class MainActivity extends BridgeActivity {
         retryBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
         retryBtn.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         retryBtn.setGravity(Gravity.CENTER);
-        retryBtn.setPadding(dpToPx(40), dpToPx(12), dpToPx(40), dpToPx(12));
+        retryBtn.setPadding(dpToPx(48), dpToPx(14), dpToPx(48), dpToPx(14));
 
         GradientDrawable retryBg = new GradientDrawable();
         retryBg.setColor(ACCENT_GREEN);
-        retryBg.setCornerRadius(dpToPx(22));
+        retryBg.setCornerRadius(dpToPx(24));
         retryBtn.setBackground(retryBg);
 
-        LinearLayout.LayoutParams retryParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
+        LinearLayout.LayoutParams retryP = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
         );
-        retryParams.topMargin = dpToPx(24);
-        retryParams.gravity = Gravity.CENTER;
+        retryP.topMargin = dpToPx(28);
+        retryP.gravity = Gravity.CENTER;
 
         container.addView(title);
         container.addView(subtitle);
-        container.addView(retryBtn, retryParams);
+        container.addView(retryBtn, retryP);
 
-        FrameLayout.LayoutParams centerParams = new FrameLayout.LayoutParams(
+        overlay.addView(container, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                Gravity.CENTER
-        );
-        overlay.addView(container, centerParams);
+                FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER
+        ));
 
         ViewGroup contentView = findViewById(android.R.id.content);
         ViewGroup rootLayout = (ViewGroup) contentView.getChildAt(0);
-        CoordinatorLayout.LayoutParams overlayParams = new CoordinatorLayout.LayoutParams(
+        rootLayout.addView(overlay, new CoordinatorLayout.LayoutParams(
                 CoordinatorLayout.LayoutParams.MATCH_PARENT,
                 CoordinatorLayout.LayoutParams.MATCH_PARENT
-        );
-        rootLayout.addView(overlay, overlayParams);
+        ));
 
         this.offlineOverlay = overlay;
 

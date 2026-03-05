@@ -6,12 +6,8 @@ import Network
 class LairaboostViewController: CAPBridgeViewController {
 
     // MARK: - UI Elements
-    private var navToolbar: UIVisualEffectView!
-    private var backBtn: UIButton!
-    private var forwardBtn: UIButton!
-    private var shareBtn: UIButton!
-    private var refreshBtn: UIButton!
-    private var homeBtn: UIButton!
+    private var navToolbar: UIView!
+    private var tabButtons: [UIButton] = []
     private var offlineOverlay: UIView!
     private var refreshControl: UIRefreshControl!
 
@@ -20,19 +16,27 @@ class LairaboostViewController: CAPBridgeViewController {
     private var isOnline = true
 
     // MARK: - Constants
-    private let toolbarHeight: CGFloat = 56
-    private let brandBg = UIColor(red: 26/255.0, green: 28/255.0, blue: 36/255.0, alpha: 1)
+    private let toolbarHeight: CGFloat = 64
+    private let tabBarBg = UIColor(red: 18/255.0, green: 20/255.0, blue: 28/255.0, alpha: 0.97)
     private let accentGreen = UIColor(red: 16/255.0, green: 185/255.0, blue: 129/255.0, alpha: 1)
-    private let accentBlue = UIColor(red: 59/255.0, green: 130/255.0, blue: 246/255.0, alpha: 1)
-    private let iconColor = UIColor(white: 0.75, alpha: 1)
-    private let iconActiveColor = UIColor.white
+    private let defaultGray = UIColor(red: 140/255.0, green: 140/255.0, blue: 155/255.0, alpha: 1)
+    private let dimGray = UIColor(red: 60/255.0, green: 60/255.0, blue: 70/255.0, alpha: 1)
+
+    // Tab config: (SF Symbol name, label)
+    private let tabs: [(icon: String, filledIcon: String, label: String)] = [
+        ("chevron.backward", "chevron.backward", "Back"),
+        ("house", "house.fill", "Home"),
+        ("square.grid.2x2", "square.grid.2x2.fill", "Services"),
+        ("square.and.arrow.up", "square.and.arrow.up.fill", "Share"),
+        ("arrow.clockwise", "arrow.clockwise", "Reload"),
+    ]
 
     // MARK: - Lifecycle
 
     override func viewDidLoad() {
         super.viewDidLoad()
         webView?.scrollView.bounces = true
-        setupBottomToolbar()
+        setupTabBar()
         setupPullToRefresh()
         setupOfflineView()
         startNetworkMonitoring()
@@ -45,46 +49,45 @@ class LairaboostViewController: CAPBridgeViewController {
         updateScrollInsets()
     }
 
-    // MARK: - Modern Bottom Toolbar
+    // MARK: - Tab Bar
 
-    private func setupBottomToolbar() {
-        // Frosted glass blur effect
-        let blur = UIBlurEffect(style: .systemChromeMaterialDark)
-        navToolbar = UIVisualEffectView(effect: blur)
+    private func setupTabBar() {
+        navToolbar = UIView()
+        navToolbar.backgroundColor = tabBarBg
         navToolbar.translatesAutoresizingMaskIntoConstraints = false
 
-        // Top hairline separator
+        // Top border
         let sep = UIView()
-        sep.backgroundColor = UIColor.white.withAlphaComponent(0.08)
+        sep.backgroundColor = UIColor.white.withAlphaComponent(0.06)
         sep.translatesAutoresizingMaskIntoConstraints = false
-        navToolbar.contentView.addSubview(sep)
+        navToolbar.addSubview(sep)
 
-        // Create buttons with labels
-        backBtn = makeNavButton(iconName: "chevron.left", label: "Back", action: #selector(tapBack))
-        forwardBtn = makeNavButton(iconName: "chevron.right", label: "Forward", action: #selector(tapForward))
-        homeBtn = makeNavButton(iconName: "house.fill", label: "Home", action: #selector(tapHome))
-        shareBtn = makeNavButton(iconName: "square.and.arrow.up", label: "Share", action: #selector(tapShare))
-        refreshBtn = makeNavButton(iconName: "arrow.clockwise", label: "Reload", action: #selector(tapRefresh))
-
-        let stack = UIStackView(arrangedSubviews: [backBtn, forwardBtn, homeBtn, shareBtn, refreshBtn])
+        // Build tab buttons
+        let stack = UIStackView()
         stack.axis = .horizontal
         stack.distribution = .fillEqually
         stack.alignment = .center
         stack.translatesAutoresizingMaskIntoConstraints = false
-        navToolbar.contentView.addSubview(stack)
 
+        for (index, tab) in tabs.enumerated() {
+            let btn = createTabButton(index: index, iconName: tab.icon, label: tab.label)
+            tabButtons.append(btn)
+            stack.addArrangedSubview(btn)
+        }
+
+        navToolbar.addSubview(stack)
         view.addSubview(navToolbar)
 
         NSLayoutConstraint.activate([
             sep.topAnchor.constraint(equalTo: navToolbar.topAnchor),
             sep.leadingAnchor.constraint(equalTo: navToolbar.leadingAnchor),
             sep.trailingAnchor.constraint(equalTo: navToolbar.trailingAnchor),
-            sep.heightAnchor.constraint(equalToConstant: 0.33),
+            sep.heightAnchor.constraint(equalToConstant: 0.5),
 
-            stack.topAnchor.constraint(equalTo: navToolbar.contentView.topAnchor, constant: 4),
-            stack.leadingAnchor.constraint(equalTo: navToolbar.contentView.leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: navToolbar.contentView.trailingAnchor),
-            stack.heightAnchor.constraint(equalToConstant: toolbarHeight - 4),
+            stack.topAnchor.constraint(equalTo: navToolbar.topAnchor, constant: 6),
+            stack.leadingAnchor.constraint(equalTo: navToolbar.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: navToolbar.trailingAnchor),
+            stack.heightAnchor.constraint(equalToConstant: toolbarHeight - 6),
 
             navToolbar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             navToolbar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -92,16 +95,17 @@ class LairaboostViewController: CAPBridgeViewController {
             navToolbar.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -toolbarHeight)
         ])
 
-        updateNavButtons()
+        highlightTab(1) // Home active by default
     }
 
-    private func makeNavButton(iconName: String, label: String, action: Selector) -> UIButton {
+    private func createTabButton(index: Int, iconName: String, label: String) -> UIButton {
         let btn = UIButton(type: .custom)
+        btn.tag = index
 
-        // Icon
-        let iconConfig = UIImage.SymbolConfiguration(pointSize: 18, weight: .medium)
+        // Icon image view
+        let iconConfig = UIImage.SymbolConfiguration(pointSize: 24, weight: .regular)
         let iconView = UIImageView(image: UIImage(systemName: iconName, withConfiguration: iconConfig))
-        iconView.tintColor = iconColor
+        iconView.tintColor = defaultGray
         iconView.contentMode = .scaleAspectFit
         iconView.translatesAutoresizingMaskIntoConstraints = false
         iconView.tag = 100
@@ -110,84 +114,96 @@ class LairaboostViewController: CAPBridgeViewController {
         let lbl = UILabel()
         lbl.text = label
         lbl.font = .systemFont(ofSize: 10, weight: .medium)
-        lbl.textColor = iconColor
+        lbl.textColor = defaultGray
         lbl.textAlignment = .center
         lbl.translatesAutoresizingMaskIntoConstraints = false
         lbl.tag = 200
 
-        let stack = UIStackView(arrangedSubviews: [iconView, lbl])
-        stack.axis = .vertical
-        stack.alignment = .center
-        stack.spacing = 3
-        stack.isUserInteractionEnabled = false
-        stack.translatesAutoresizingMaskIntoConstraints = false
+        let vStack = UIStackView(arrangedSubviews: [iconView, lbl])
+        vStack.axis = .vertical
+        vStack.alignment = .center
+        vStack.spacing = 4
+        vStack.isUserInteractionEnabled = false
+        vStack.translatesAutoresizingMaskIntoConstraints = false
 
-        btn.addSubview(stack)
+        btn.addSubview(vStack)
 
         NSLayoutConstraint.activate([
-            iconView.heightAnchor.constraint(equalToConstant: 22),
-            stack.centerXAnchor.constraint(equalTo: btn.centerXAnchor),
-            stack.centerYAnchor.constraint(equalTo: btn.centerYAnchor)
+            iconView.widthAnchor.constraint(equalToConstant: 28),
+            iconView.heightAnchor.constraint(equalToConstant: 28),
+            vStack.centerXAnchor.constraint(equalTo: btn.centerXAnchor),
+            vStack.centerYAnchor.constraint(equalTo: btn.centerYAnchor, constant: -2)
         ])
 
-        btn.addTarget(self, action: action, for: .touchUpInside)
+        btn.addTarget(self, action: #selector(tabTapped(_:)), for: .touchUpInside)
         return btn
     }
 
-    private func updateNavButtons() {
-        let canBack = webView?.canGoBack ?? false
-        let canFwd = webView?.canGoForward ?? false
-        backBtn?.isEnabled = canBack
-        forwardBtn?.isEnabled = canFwd
-        setButtonAppearance(backBtn, active: canBack)
-        setButtonAppearance(forwardBtn, active: canFwd)
-        setButtonAppearance(homeBtn, active: true, highlight: true)
-        setButtonAppearance(shareBtn, active: true)
-        setButtonAppearance(refreshBtn, active: true)
-    }
+    private func highlightTab(_ activeIndex: Int) {
+        for (i, btn) in tabButtons.enumerated() {
+            let isActive = (i == activeIndex)
+            let tab = tabs[i]
+            let color = isActive ? accentGreen : defaultGray
 
-    private func setButtonAppearance(_ btn: UIButton?, active: Bool, highlight: Bool = false) {
-        guard let btn = btn else { return }
-        let color = highlight ? accentGreen : (active ? iconActiveColor : UIColor(white: 0.35, alpha: 1))
-        if let iconView = btn.viewWithTag(100) as? UIImageView {
-            iconView.tintColor = color
-        }
-        if let lbl = btn.viewWithTag(200) as? UILabel {
-            lbl.textColor = color
-        }
-    }
+            // Handle Back button dimming
+            if i == 0 {
+                let canBack = webView?.canGoBack ?? false
+                let c = canBack ? defaultGray : dimGray
+                if let iv = btn.viewWithTag(100) as? UIImageView {
+                    iv.tintColor = c
+                }
+                if let lbl = btn.viewWithTag(200) as? UILabel {
+                    lbl.textColor = c
+                }
+                btn.isEnabled = canBack
+                btn.alpha = canBack ? 1.0 : 0.6
+                continue
+            }
 
-    // MARK: - Toolbar Actions
-
-    @objc private func tapBack() {
-        webView?.goBack()
-    }
-
-    @objc private func tapForward() {
-        webView?.goForward()
-    }
-
-    @objc private func tapHome() {
-        if let url = URL(string: "https://lairaboost.com") {
-            webView?.load(URLRequest(url: url))
+            if let iconView = btn.viewWithTag(100) as? UIImageView {
+                let iconName = isActive ? tab.filledIcon : tab.icon
+                let config = UIImage.SymbolConfiguration(pointSize: 24, weight: isActive ? .semibold : .regular)
+                iconView.image = UIImage(systemName: iconName, withConfiguration: config)
+                iconView.tintColor = color
+            }
+            if let lbl = btn.viewWithTag(200) as? UILabel {
+                lbl.textColor = color
+                lbl.font = .systemFont(ofSize: 10, weight: isActive ? .semibold : .medium)
+            }
         }
     }
 
-    @objc private func tapShare() {
-        guard let url = webView?.url else { return }
-        let items: [Any] = [url]
-        let ac = UIActivityViewController(activityItems: items, applicationActivities: nil)
-        if let popover = ac.popoverPresentationController {
-            popover.sourceView = shareBtn
-            popover.sourceRect = shareBtn.bounds
-        }
-        present(ac, animated: true)
-    }
+    @objc private func tabTapped(_ sender: UIButton) {
+        let index = sender.tag
 
-    @objc private func tapRefresh() {
-        let generator = UIImpactFeedbackGenerator(style: .light)
-        generator.impactOccurred()
-        webView?.reload()
+        switch index {
+        case 0: // Back
+            webView?.goBack()
+        case 1: // Home
+            if let url = URL(string: "https://lairaboost.com") {
+                webView?.load(URLRequest(url: url))
+            }
+            highlightTab(1)
+        case 2: // Services
+            if let url = URL(string: "https://lairaboost.com/services") {
+                webView?.load(URLRequest(url: url))
+            }
+            highlightTab(2)
+        case 3: // Share
+            guard let url = webView?.url else { return }
+            let ac = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+            if let popover = ac.popoverPresentationController {
+                popover.sourceView = sender
+                popover.sourceRect = sender.bounds
+            }
+            present(ac, animated: true)
+        case 4: // Reload
+            let generator = UIImpactFeedbackGenerator(style: .light)
+            generator.impactOccurred()
+            webView?.reload()
+        default:
+            break
+        }
     }
 
     // MARK: - Pull to Refresh
@@ -211,7 +227,7 @@ class LairaboostViewController: CAPBridgeViewController {
 
     private func setupOfflineView() {
         offlineOverlay = UIView()
-        offlineOverlay.backgroundColor = brandBg
+        offlineOverlay.backgroundColor = UIColor(red: 18/255.0, green: 20/255.0, blue: 28/255.0, alpha: 1)
         offlineOverlay.isHidden = true
         offlineOverlay.translatesAutoresizingMaskIntoConstraints = false
 
@@ -241,16 +257,16 @@ class LairaboostViewController: CAPBridgeViewController {
         retryBtn.setTitle("Retry", for: .normal)
         retryBtn.setTitleColor(.white, for: .normal)
         retryBtn.backgroundColor = accentGreen
-        retryBtn.layer.cornerRadius = 22
+        retryBtn.layer.cornerRadius = 24
         retryBtn.titleLabel?.font = .systemFont(ofSize: 16, weight: .semibold)
-        retryBtn.contentEdgeInsets = UIEdgeInsets(top: 12, left: 40, bottom: 12, right: 40)
+        retryBtn.contentEdgeInsets = UIEdgeInsets(top: 14, left: 48, bottom: 14, right: 48)
         retryBtn.addTarget(self, action: #selector(tapRetry), for: .touchUpInside)
 
         container.addArrangedSubview(icon)
         container.addArrangedSubview(title)
         container.addArrangedSubview(subtitle)
         container.addArrangedSubview(retryBtn)
-        container.setCustomSpacing(24, after: subtitle)
+        container.setCustomSpacing(28, after: subtitle)
 
         offlineOverlay.addSubview(container)
         view.addSubview(offlineOverlay)
@@ -282,12 +298,9 @@ class LairaboostViewController: CAPBridgeViewController {
             DispatchQueue.main.async {
                 let wasOffline = !(self?.isOnline ?? true)
                 self?.isOnline = path.status == .satisfied
-
                 if path.status == .satisfied {
                     self?.offlineOverlay.isHidden = true
-                    if wasOffline {
-                        self?.webView?.reload()
-                    }
+                    if wasOffline { self?.webView?.reload() }
                 } else {
                     self?.offlineOverlay.isHidden = false
                 }
@@ -303,18 +316,31 @@ class LairaboostViewController: CAPBridgeViewController {
         webView?.allowsBackForwardNavigationGestures = true
     }
 
-    // MARK: - Navigation Observation (KVO)
+    // MARK: - Navigation Observation
 
     private func observeNavigation() {
         webView?.addObserver(self, forKeyPath: "canGoBack", options: .new, context: nil)
-        webView?.addObserver(self, forKeyPath: "canGoForward", options: .new, context: nil)
+        webView?.addObserver(self, forKeyPath: "URL", options: .new, context: nil)
     }
 
     override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey : Any]?, context: UnsafeMutableRawPointer?) {
-        if keyPath == "canGoBack" || keyPath == "canGoForward" {
-            updateNavButtons()
+        if keyPath == "canGoBack" || keyPath == "URL" {
+            updateTabState()
         } else {
             super.observeValue(forKeyPath: keyPath, of: object, change: change, context: context)
+        }
+    }
+
+    private func updateTabState() {
+        // Detect which tab is active based on URL
+        if let urlStr = webView?.url?.absoluteString {
+            if urlStr.contains("/services") {
+                highlightTab(2)
+            } else {
+                highlightTab(1)
+            }
+        } else {
+            highlightTab(1)
         }
     }
 
@@ -331,7 +357,7 @@ class LairaboostViewController: CAPBridgeViewController {
 
     deinit {
         webView?.removeObserver(self, forKeyPath: "canGoBack")
-        webView?.removeObserver(self, forKeyPath: "canGoForward")
+        webView?.removeObserver(self, forKeyPath: "URL")
         pathMonitor?.cancel()
     }
 }
