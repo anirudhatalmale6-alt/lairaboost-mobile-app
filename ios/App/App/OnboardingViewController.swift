@@ -15,9 +15,10 @@ class OnboardingViewController: UIViewController {
     private let darkBg = UIColor(red: 18/255.0, green: 20/255.0, blue: 28/255.0, alpha: 1)
 
     private let pages: [(icon: String, title: String, subtitle: String)] = [
-        ("bolt.fill", "Social Media Growth", "Boost your social media presence with professional marketing services for all major platforms."),
-        ("bell.fill", "Stay Updated", "Get real-time notifications on your order status and never miss important updates."),
-        ("shield.fill", "Safe & Secure", "Your data is protected with industry-standard encryption. Fast, reliable, and trusted by thousands."),
+        ("chart.line.uptrend.xyaxis", "Grow Your Audience", "Professional marketing tools to expand your reach across Instagram, TikTok, YouTube, and more."),
+        ("person.crop.circle.fill", "Your Account Dashboard", "Track your balance, monitor campaigns, and manage everything from your native account screen."),
+        ("bell.fill", "Real-Time Alerts", "Get instant notifications on campaign progress. Enable Face ID for secure, private access."),
+        ("shield.fill", "Trusted & Secure", "Protected by industry-standard encryption. Trusted by thousands of marketers worldwide."),
     ]
 
     // MARK: - Lifecycle

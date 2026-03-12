@@ -1,6 +1,7 @@
 import UIKit
 import WebKit
 import UserNotifications
+import LocalAuthentication
 
 class SettingsViewController: UITableViewController {
 
@@ -37,6 +38,7 @@ class SettingsViewController: UITableViewController {
 
     private var sections: [(title: String, items: [SettingsItem])] = []
     private var notificationsEnabled = false
+    private var biometricEnabled = false
 
     // MARK: - Lifecycle
 
@@ -68,6 +70,7 @@ class SettingsViewController: UITableViewController {
         tableView.register(UITableViewCell.self, forCellReuseIdentifier: "toggleCell")
 
         checkNotificationStatus()
+        biometricEnabled = UserDefaults.standard.bool(forKey: "com.lairaboost.biometricEnabled")
         buildSections()
     }
 
@@ -89,8 +92,14 @@ class SettingsViewController: UITableViewController {
                     }
                 },
             ]),
+            (title: "Quick Actions", items: [
+                SettingsItem(title: "Share App", icon: "square.and.arrow.up", iconColor: .systemBlue) { [weak self] in
+                    self?.shareApp()
+                },
+            ]),
             (title: "Preferences", items: [
                 SettingsItem(title: "Push Notifications", icon: "bell.fill", iconColor: .systemOrange, type: .toggle),
+                SettingsItem(title: "Face ID / Touch ID Lock", icon: "faceid", iconColor: .systemGreen, type: .toggle),
                 SettingsItem(title: "Clear Cache", icon: "trash.fill", iconColor: .systemRed, type: .destructive) { [weak self] in
                     self?.clearCache()
                 },
@@ -197,6 +206,46 @@ class SettingsViewController: UITableViewController {
         }
     }
 
+    @objc private func biometricToggleChanged(_ sender: UISwitch) {
+        if sender.isOn {
+            let context = LAContext()
+            var error: NSError?
+            if context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) {
+                context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics,
+                                      localizedReason: "Enable biometric lock for Lairaboost") { [weak self] success, _ in
+                    DispatchQueue.main.async {
+                        if success {
+                            self?.biometricEnabled = true
+                            UserDefaults.standard.set(true, forKey: "com.lairaboost.biometricEnabled")
+                        } else {
+                            sender.isOn = false
+                        }
+                    }
+                }
+            } else {
+                sender.isOn = false
+                let alert = UIAlertController(title: "Not Available",
+                    message: "Biometric authentication is not available on this device.",
+                    preferredStyle: .alert)
+                alert.addAction(UIAlertAction(title: "OK", style: .default))
+                present(alert, animated: true)
+            }
+        } else {
+            biometricEnabled = false
+            UserDefaults.standard.set(false, forKey: "com.lairaboost.biometricEnabled")
+        }
+    }
+
+    private func shareApp() {
+        guard let url = webView?.url ?? URL(string: "https://lairaboost.com") else { return }
+        let ac = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        if let popover = ac.popoverPresentationController {
+            popover.sourceView = view
+            popover.sourceRect = CGRect(x: view.bounds.midX, y: view.bounds.midY, width: 0, height: 0)
+        }
+        present(ac, animated: true)
+    }
+
     // MARK: - Table View Data Source
 
     override func numberOfSections(in tableView: UITableView) -> Int {
@@ -233,11 +282,19 @@ class SettingsViewController: UITableViewController {
             cell.imageView?.tintColor = item.iconColor
 
             let toggle = UISwitch()
-            toggle.isOn = notificationsEnabled
             toggle.onTintColor = accentGreen
-            toggle.addTarget(self, action: #selector(notificationToggleChanged(_:)), for: .valueChanged)
-            cell.accessoryView = toggle
 
+            if item.title.contains("Face ID") || item.title.contains("Touch ID") {
+                toggle.isOn = biometricEnabled
+                toggle.tag = 200
+                toggle.addTarget(self, action: #selector(biometricToggleChanged(_:)), for: .valueChanged)
+            } else {
+                toggle.isOn = notificationsEnabled
+                toggle.tag = 100
+                toggle.addTarget(self, action: #selector(notificationToggleChanged(_:)), for: .valueChanged)
+            }
+
+            cell.accessoryView = toggle
             return cell
         }
 
