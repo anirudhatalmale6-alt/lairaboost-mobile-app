@@ -45,10 +45,10 @@ class LairaboostViewController: CAPBridgeViewController {
     private let accentGreen = UIColor(red: 16/255.0, green: 185/255.0, blue: 129/255.0, alpha: 1)
     private let defaultGray = UIColor(red: 140/255.0, green: 140/255.0, blue: 155/255.0, alpha: 1)
 
-    // 5 tabs: Home (web), Services (web), Account (native), Notifications (native), More (native)
+    // 5 tabs: Home (web), Orders (web), Account (native), Notifications (native), More (native)
     private let tabs: [(icon: String, filledIcon: String, label: String)] = [
         ("house", "house.fill", "Home"),
-        ("square.grid.2x2", "square.grid.2x2.fill", "Services"),
+        ("list.clipboard", "list.clipboard.fill", "Orders"),
         ("person.crop.circle", "person.crop.circle.fill", "Account"),
         ("bell", "bell.fill", "Alerts"),
         ("ellipsis.circle", "ellipsis.circle.fill", "More"),
@@ -59,6 +59,7 @@ class LairaboostViewController: CAPBridgeViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         webView?.scrollView.bounces = true
+        webView?.navigationDelegate = self
         setupTabBar()
         setupPullToRefresh()
         setupOfflineView()
@@ -276,8 +277,8 @@ class LairaboostViewController: CAPBridgeViewController {
                 webView?.load(URLRequest(url: url))
             }
             highlightTab(0)
-        case 1: // Services
-            if let url = URL(string: "https://lairaboost.com/services") {
+        case 1: // Orders
+            if let url = URL(string: "https://lairaboost.com/orders") {
                 webView?.load(URLRequest(url: url))
             }
             highlightTab(1)
@@ -448,7 +449,7 @@ class LairaboostViewController: CAPBridgeViewController {
 
     private func updateTabState() {
         if let urlStr = webView?.url?.absoluteString {
-            if urlStr.contains("/services") {
+            if urlStr.contains("/orders") {
                 highlightTab(1)
             } else {
                 highlightTab(0)
@@ -669,7 +670,49 @@ class LairaboostViewController: CAPBridgeViewController {
         })();
         """
 
-        // 4. Safe area CSS for all devices
+        // 4. Block service ordering pages - redirect to orders/dashboard
+        let blockServicesJS = """
+        (function() {
+            function blockServices() {
+                var path = window.location.pathname.toLowerCase();
+                // Redirect service ordering pages to orders
+                if (path === '/services' || path.indexOf('/services/') === 0 ||
+                    path === '/neworder' || path.indexOf('/neworder/') === 0) {
+                    window.location.replace('/orders');
+                    return;
+                }
+
+                // Hide "New Order" and "Services" links in navigation/sidebar
+                document.querySelectorAll('a[href*="/services"], a[href*="/neworder"]').forEach(function(el) {
+                    // Only hide if it's a nav/menu link, not an inline reference
+                    var parent = el.closest('nav, .sidebar, .nav, .menu, .navbar, ul, .dropdown');
+                    if (parent) {
+                        el.style.display = 'none';
+                    }
+                });
+
+                // Hide any "New Order" buttons or prominent service ordering CTAs
+                document.querySelectorAll('.btn, button, a.btn').forEach(function(el) {
+                    var text = (el.textContent || '').trim().toLowerCase();
+                    if (text === 'new order' || text === 'place order' || text === 'order now' || text === 'start now') {
+                        var href = el.getAttribute('href') || '';
+                        if (href.indexOf('/services') !== -1 || href.indexOf('/neworder') !== -1) {
+                            el.style.display = 'none';
+                        }
+                    }
+                });
+            }
+
+            blockServices();
+            var debounce2;
+            new MutationObserver(function() {
+                clearTimeout(debounce2);
+                debounce2 = setTimeout(blockServices, 150);
+            }).observe(document.body || document.documentElement, {childList:true, subtree:true});
+        })();
+        """
+
+        // 5. Safe area CSS for all devices
         let safeAreaCSS = """
         (function() {
             var style = document.createElement('style');
@@ -682,6 +725,7 @@ class LairaboostViewController: CAPBridgeViewController {
         })();
         """
 
+        ucc.addUserScript(WKUserScript(source: blockServicesJS, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         ucc.addUserScript(WKUserScript(source: adsenseJS, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
         ucc.addUserScript(WKUserScript(source: contentJS, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
         ucc.addUserScript(WKUserScript(source: siwaJS, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
@@ -697,8 +741,31 @@ class LairaboostViewController: CAPBridgeViewController {
 
     func handleScriptMessage(_ message: WKScriptMessage) {
         if message.name == "appleSignIn" {
-            performAppleSignIn()
+            if let body = message.body as? [String: Any],
+               let action = body["action"] as? String {
+                if action == "signIn" {
+                    performAppleSignIn()
+                } else if action == "error", let msg = body["message"] as? String {
+                    // Dismiss loading if present
+                    if let presented = presentedViewController as? UIAlertController,
+                       presented.message == "Signing in..." {
+                        presented.dismiss(animated: true) { [weak self] in
+                            self?.showError(msg)
+                        }
+                    } else {
+                        showError(msg)
+                    }
+                }
+            } else {
+                performAppleSignIn()
+            }
         }
+    }
+
+    private func showError(_ message: String) {
+        let alert = UIAlertController(title: "Sign In Error", message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
     }
 
     // MARK: - Apple Sign In
@@ -721,6 +788,44 @@ class LairaboostViewController: CAPBridgeViewController {
         webView?.removeObserver(self, forKeyPath: "URL")
         webView?.configuration.userContentController.removeScriptMessageHandler(forName: "appleSignIn")
         pathMonitor?.cancel()
+    }
+}
+
+// MARK: - WKNavigationDelegate
+
+extension LairaboostViewController: WKNavigationDelegate {
+
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
+                 decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        guard let url = navigationAction.request.url,
+              let host = url.host?.lowercased() else {
+            decisionHandler(.allow)
+            return
+        }
+
+        // Only intercept lairaboost.com URLs
+        if host.contains("lairaboost.com") {
+            let path = url.path.lowercased()
+            // Block /services and /neworder — redirect to /orders
+            if path == "/services" || path.hasPrefix("/services/") ||
+               path == "/neworder" || path.hasPrefix("/neworder/") {
+                decisionHandler(.cancel)
+                if let ordersURL = URL(string: "https://lairaboost.com/orders") {
+                    webView.load(URLRequest(url: ordersURL))
+                }
+                return
+            }
+        }
+
+        decisionHandler(.allow)
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        // Dismiss loading alert if SIWA navigation completed
+        if let presented = presentedViewController as? UIAlertController,
+           presented.message == "Signing in..." {
+            presented.dismiss(animated: true)
+        }
     }
 }
 
@@ -762,45 +867,43 @@ extension LairaboostViewController: ASAuthorizationControllerDelegate {
         let effectiveEmail = email.isEmpty ?
             (UserDefaults.standard.string(forKey: "com.lairaboost.appleEmail") ?? "") : email
 
-        // Authenticate with backend
+        // Authenticate with backend using form POST (not fetch)
+        // Form submission causes a real page navigation which properly saves cookies
         let js = """
         (function() {
-            var data = {
-                user_id: '\(userId.replacingOccurrences(of: "'", with: "\\'"))',
-                email: '\(effectiveEmail.replacingOccurrences(of: "'", with: "\\'"))',
-                first_name: '\(firstName.replacingOccurrences(of: "'", with: "\\'"))',
-                last_name: '\(lastName.replacingOccurrences(of: "'", with: "\\'"))',
-                identity_token: '\(identityToken.replacingOccurrences(of: "'", with: "\\'"))',
-                authorization_code: '\(authCode.replacingOccurrences(of: "'", with: "\\'"))'
+            var form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '/apple_auth.php';
+            form.style.display = 'none';
+
+            var fields = {
+                'user_id': '\(userId.replacingOccurrences(of: "'", with: "\\'"))',
+                'email': '\(effectiveEmail.replacingOccurrences(of: "'", with: "\\'"))',
+                'first_name': '\(firstName.replacingOccurrences(of: "'", with: "\\'"))',
+                'last_name': '\(lastName.replacingOccurrences(of: "'", with: "\\'"))',
+                'identity_token': '\(identityToken.replacingOccurrences(of: "'", with: "\\'"))',
+                'authorization_code': '\(authCode.replacingOccurrences(of: "'", with: "\\'"))'
             };
 
-            fetch('/apple_auth.php', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                credentials: 'same-origin',
-                body: JSON.stringify(data)
-            })
-            .then(function(r) { return r.json(); })
-            .then(function(d) {
-                if (d.success) {
-                    window.location.href = d.redirect || '/';
-                } else {
-                    window.webkit.messageHandlers.appleSignIn.postMessage({action:'error', message: d.error || 'Sign in failed'});
-                }
-            })
-            .catch(function(e) {
-                window.webkit.messageHandlers.appleSignIn.postMessage({action:'error', message: 'Connection error. Please try again.'});
-            });
+            for (var key in fields) {
+                var input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = key;
+                input.value = fields[key];
+                form.appendChild(input);
+            }
+
+            document.body.appendChild(form);
+            form.submit();
         })();
         """
 
-        // Dismiss loading after a delay and evaluate JS
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            self?.webView?.evaluateJavaScript(js) { _, _ in
-                // Wait for navigation to complete
-                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-                    loadingAlert.dismiss(animated: true)
-                }
+        // Submit form and dismiss loading when navigation completes
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            self?.webView?.evaluateJavaScript(js, completionHandler: nil)
+            // Dismiss loading after navigation has time to complete
+            DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
+                loadingAlert.dismiss(animated: true)
             }
         }
     }

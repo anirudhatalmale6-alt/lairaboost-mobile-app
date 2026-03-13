@@ -26,14 +26,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             icon: UIApplicationShortcutIcon(systemImageName: "house.fill"),
             userInfo: nil
         )
-        let servicesAction = UIApplicationShortcutItem(
-            type: "com.lairaboost.services",
-            localizedTitle: "Services",
-            localizedSubtitle: nil,
-            icon: UIApplicationShortcutIcon(systemImageName: "square.grid.2x2.fill"),
-            userInfo: nil
-        )
-        let ordersAction = UIApplicationShortcutItem(
+        let ordersQuickAction = UIApplicationShortcutItem(
             type: "com.lairaboost.orders",
             localizedTitle: "My Orders",
             localizedSubtitle: nil,
@@ -48,7 +41,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             userInfo: nil
         )
 
-        application.shortcutItems = [homeAction, servicesAction, ordersAction, addFundsAction]
+        application.shortcutItems = [homeAction, ordersQuickAction, addFundsAction]
     }
 
     func application(_ application: UIApplication, performActionFor shortcutItem: UIApplicationShortcutItem, completionHandler: @escaping (Bool) -> Void) {
@@ -61,8 +54,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         var urlString = "https://lairaboost.com"
 
         switch shortcutItem.type {
-        case "com.lairaboost.services":
-            urlString = "https://lairaboost.com/services"
         case "com.lairaboost.orders":
             urlString = "https://lairaboost.com/orders"
         case "com.lairaboost.addfunds":

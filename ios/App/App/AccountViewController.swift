@@ -84,26 +84,57 @@ class AccountViewController: UIViewController {
     // MARK: - Load Data
 
     private func loadUserData() {
-        let js = """
-        fetch('/user_info.php', {credentials: 'same-origin'})
-            .then(function(r) { return r.text(); })
-            .then(function(t) { return t; })
-        """
-        webView?.evaluateJavaScript(js) { [weak self] result, error in
+        guard let webView = webView else {
+            loadingIndicator.stopAnimating()
+            loadingIndicator.isHidden = true
+            buildNotLoggedInUI()
+            return
+        }
+
+        // Get cookies from WKWebView and use them with URLSession
+        let cookieStore = webView.configuration.websiteDataStore.httpCookieStore
+        cookieStore.getAllCookies { [weak self] cookies in
             guard let self = self else { return }
 
-            self.loadingIndicator.stopAnimating()
-            self.loadingIndicator.isHidden = true
-
-            if let jsonStr = result as? String,
-               let data = jsonStr.data(using: .utf8),
-               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               json["authenticated"] as? Bool == true {
-                self.userData = json
-                self.buildAccountUI()
-            } else {
-                self.buildNotLoggedInUI()
+            guard let url = URL(string: "https://lairaboost.com/user_info.php") else {
+                DispatchQueue.main.async {
+                    self.loadingIndicator.stopAnimating()
+                    self.loadingIndicator.isHidden = true
+                    self.buildNotLoggedInUI()
+                }
+                return
             }
+
+            var request = URLRequest(url: url)
+            request.httpMethod = "GET"
+
+            // Build cookie header from WKWebView cookies
+            let cookieHeader = cookies
+                .filter { $0.domain.contains("lairaboost.com") }
+                .map { "\($0.name)=\($0.value)" }
+                .joined(separator: "; ")
+
+            if !cookieHeader.isEmpty {
+                request.setValue(cookieHeader, forHTTPHeaderField: "Cookie")
+            }
+
+            URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+                DispatchQueue.main.async {
+                    guard let self = self else { return }
+
+                    self.loadingIndicator.stopAnimating()
+                    self.loadingIndicator.isHidden = true
+
+                    if let data = data,
+                       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                       json["authenticated"] as? Bool == true {
+                        self.userData = json
+                        self.buildAccountUI()
+                    } else {
+                        self.buildNotLoggedInUI()
+                    }
+                }
+            }.resume()
         }
     }
 
