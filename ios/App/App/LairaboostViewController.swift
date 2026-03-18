@@ -4,6 +4,7 @@ import WebKit
 import Network
 import AuthenticationServices
 import LocalAuthentication
+import SafariServices
 
 // MARK: - Script Message Handler
 
@@ -670,44 +671,98 @@ class LairaboostViewController: CAPBridgeViewController {
         })();
         """
 
-        // 4. Block service ordering pages - redirect to orders/dashboard
+        // 4. Aggressive blocking of ALL service ordering, purchasing, and SMM features
         let blockServicesJS = """
         (function() {
+            // Blocked paths — redirect to dashboard
+            var blockedPaths = [
+                '/services', '/neworder', '/addfunds', '/add-funds',
+                '/api', '/api-docs', '/apidocs', '/child-panels',
+                '/childpanels', '/childpanel', '/reseller'
+            ];
+
+            function isBlockedPath(path) {
+                path = path.toLowerCase().replace(/\\/+$/, '');
+                for (var i = 0; i < blockedPaths.length; i++) {
+                    if (path === blockedPaths[i] || path.indexOf(blockedPaths[i] + '/') === 0) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            // Immediately redirect blocked pages
+            if (isBlockedPath(window.location.pathname)) {
+                window.location.replace('/');
+                // Halt execution
+                throw new Error('blocked');
+            }
+
             function blockServices() {
-                var path = window.location.pathname.toLowerCase();
-                // Redirect service ordering pages to orders
-                if (path === '/services' || path.indexOf('/services/') === 0 ||
-                    path === '/neworder' || path.indexOf('/neworder/') === 0) {
-                    window.location.replace('/orders');
+                var path = window.location.pathname.toLowerCase().replace(/\\/+$/, '');
+                if (isBlockedPath(path)) {
+                    window.location.replace('/');
                     return;
                 }
 
-                // Hide "New Order" and "Services" links in navigation/sidebar
-                document.querySelectorAll('a[href*="/services"], a[href*="/neworder"]').forEach(function(el) {
-                    // Only hide if it's a nav/menu link, not an inline reference
-                    var parent = el.closest('nav, .sidebar, .nav, .menu, .navbar, ul, .dropdown');
-                    if (parent) {
+                // Hide ALL links to blocked pages anywhere on the page
+                var selectors = [
+                    'a[href*="/services"]', 'a[href*="/neworder"]',
+                    'a[href*="/addfunds"]', 'a[href*="/add-funds"]',
+                    'a[href*="/api"]', 'a[href*="/child"]',
+                    'a[href*="/reseller"]'
+                ];
+                document.querySelectorAll(selectors.join(',')).forEach(function(el) {
+                    var href = (el.getAttribute('href') || '').toLowerCase();
+                    // Don't hide /api links that are informational or login-related
+                    if (href.indexOf('/api') !== -1 && href.indexOf('/apple_auth') !== -1) return;
+                    el.style.display = 'none';
+                    // Also hide parent li if in a menu
+                    var li = el.closest('li');
+                    if (li) li.style.display = 'none';
+                });
+
+                // Hide ALL ordering buttons, forms, and CTAs
+                document.querySelectorAll('button, .btn, a.btn, input[type="submit"]').forEach(function(el) {
+                    var text = (el.textContent || el.value || '').trim().toLowerCase();
+                    var href = (el.getAttribute('href') || '').toLowerCase();
+                    if (text.match(/new order|place order|order now|add funds|buy now|start now|submit order|order service/) ||
+                        href.match(/\\/services|\\/neworder|\\/addfunds|\\/add-funds/)) {
                         el.style.display = 'none';
                     }
                 });
 
-                // Hide any "New Order" buttons or prominent service ordering CTAs
-                document.querySelectorAll('.btn, button, a.btn').forEach(function(el) {
-                    var text = (el.textContent || '').trim().toLowerCase();
-                    if (text === 'new order' || text === 'place order' || text === 'order now' || text === 'start now') {
-                        var href = el.getAttribute('href') || '';
-                        if (href.indexOf('/services') !== -1 || href.indexOf('/neworder') !== -1) {
-                            el.style.display = 'none';
+                // Hide service category selectors and order forms
+                document.querySelectorAll('select[name="category"], select[name="service"], #orderForm, .order-form, form[action*="neworder"], form[action*="services"]').forEach(function(el) {
+                    el.style.display = 'none';
+                });
+
+                // Hide pricing tables and service listings
+                document.querySelectorAll('.service-list, .price-list, .pricing-table, .service-card, [class*="service-item"], [class*="pricing"]').forEach(function(el) {
+                    el.style.display = 'none';
+                });
+
+                // Intercept Google sign-in links — delegate to native handler
+                document.querySelectorAll('a[href*="google=1"], a[href*="google_login"], .lb-google-btn').forEach(function(el) {
+                    if (el.dataset.nativeHandled) return;
+                    el.dataset.nativeHandled = '1';
+                    el.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.googleSignIn) {
+                            window.webkit.messageHandlers.googleSignIn.postMessage({action:'signIn', url: el.href || '/login?google=1'});
                         }
-                    }
+                    }, true);
                 });
             }
 
+            // Run immediately
             blockServices();
+            // Run on DOM mutations
             var debounce2;
             new MutationObserver(function() {
                 clearTimeout(debounce2);
-                debounce2 = setTimeout(blockServices, 150);
+                debounce2 = setTimeout(blockServices, 100);
             }).observe(document.body || document.documentElement, {childList:true, subtree:true});
         })();
         """
@@ -737,6 +792,7 @@ class LairaboostViewController: CAPBridgeViewController {
     private func setupScriptMessageHandlers() {
         scriptHandler = ScriptMessageHandler(delegate: self)
         webView?.configuration.userContentController.add(scriptHandler!, name: "appleSignIn")
+        webView?.configuration.userContentController.add(scriptHandler!, name: "googleSignIn")
     }
 
     func handleScriptMessage(_ message: WKScriptMessage) {
@@ -746,7 +802,6 @@ class LairaboostViewController: CAPBridgeViewController {
                 if action == "signIn" {
                     performAppleSignIn()
                 } else if action == "error", let msg = body["message"] as? String {
-                    // Dismiss loading if present
                     if let presented = presentedViewController as? UIAlertController,
                        presented.message == "Signing in..." {
                         presented.dismiss(animated: true) { [weak self] in
@@ -758,6 +813,16 @@ class LairaboostViewController: CAPBridgeViewController {
                 }
             } else {
                 performAppleSignIn()
+            }
+        } else if message.name == "googleSignIn" {
+            if let body = message.body as? [String: Any],
+               let urlStr = body["url"] as? String,
+               let url = URL(string: urlStr) {
+                openGoogleAuthSession(url: url)
+            } else {
+                if let url = URL(string: "https://lairaboost.com/login?google=1") {
+                    openGoogleAuthSession(url: url)
+                }
             }
         }
     }
@@ -781,12 +846,43 @@ class LairaboostViewController: CAPBridgeViewController {
         controller.performRequests()
     }
 
+    // MARK: - Google Sign In (via ASWebAuthenticationSession)
+
+    private func openGoogleAuthSession(url: URL) {
+        let session = ASWebAuthenticationSession(
+            url: url,
+            callbackURLScheme: "com.lairaboost.app"
+        ) { [weak self] callbackURL, error in
+            if let error = error {
+                if (error as? ASWebAuthenticationSessionError)?.code == .canceledLogin {
+                    return // User cancelled
+                }
+                DispatchQueue.main.async {
+                    self?.showError("Google Sign In failed. Please try again.")
+                }
+                return
+            }
+
+            // After Google OAuth completes, the server redirects back to lairaboost.com
+            // Load the homepage which should now have the session cookies set
+            DispatchQueue.main.async {
+                if let homeURL = URL(string: "https://lairaboost.com/") {
+                    self?.webView?.load(URLRequest(url: homeURL))
+                }
+            }
+        }
+        session.presentationContextProvider = self
+        session.prefersEphemeralWebBrowserSession = false
+        session.start()
+    }
+
     // MARK: - Cleanup
 
     deinit {
         webView?.removeObserver(self, forKeyPath: "canGoBack")
         webView?.removeObserver(self, forKeyPath: "URL")
         webView?.configuration.userContentController.removeScriptMessageHandler(forName: "appleSignIn")
+        webView?.configuration.userContentController.removeScriptMessageHandler(forName: "googleSignIn")
         pathMonitor?.cancel()
     }
 }
@@ -803,16 +899,35 @@ extension LairaboostViewController: WKNavigationDelegate {
             return
         }
 
+        // Handle Google OAuth — open in ASWebAuthenticationSession
+        if host.contains("accounts.google.com") || host.contains("google.com/o/oauth") {
+            decisionHandler(.cancel)
+            openGoogleAuthSession(url: url)
+            return
+        }
+
         // Only intercept lairaboost.com URLs
         if host.contains("lairaboost.com") {
-            let path = url.path.lowercased()
-            // Block /services and /neworder — redirect to /orders
-            if path == "/services" || path.hasPrefix("/services/") ||
-               path == "/neworder" || path.hasPrefix("/neworder/") {
-                decisionHandler(.cancel)
-                if let ordersURL = URL(string: "https://lairaboost.com/orders") {
-                    webView.load(URLRequest(url: ordersURL))
+            let path = url.path.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+
+            // Blocked paths — redirect to home
+            let blockedPaths = ["services", "neworder", "addfunds", "add-funds",
+                                "api", "api-docs", "apidocs", "child-panels",
+                                "childpanels", "childpanel", "reseller"]
+            for blocked in blockedPaths {
+                if path == blocked || path.hasPrefix(blocked + "/") {
+                    decisionHandler(.cancel)
+                    if let homeURL = URL(string: "https://lairaboost.com/") {
+                        webView.load(URLRequest(url: homeURL))
+                    }
+                    return
                 }
+            }
+
+            // Intercept Google sign-in link on lairaboost.com
+            if let query = url.query?.lowercased(), query.contains("google=1") {
+                decisionHandler(.cancel)
+                openGoogleAuthSession(url: url)
                 return
             }
         }
@@ -925,6 +1040,14 @@ extension LairaboostViewController: ASAuthorizationControllerDelegate {
 
 extension LairaboostViewController: ASAuthorizationControllerPresentationContextProviding {
     func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+        return view.window!
+    }
+}
+
+// MARK: - ASWebAuthenticationPresentationContextProviding
+
+extension LairaboostViewController: ASWebAuthenticationPresentationContextProviding {
+    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
         return view.window!
     }
 }
