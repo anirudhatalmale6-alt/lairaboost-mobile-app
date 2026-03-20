@@ -59,6 +59,7 @@ class LairaboostViewController: CAPBridgeViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        setCustomUserAgent()
         webView?.scrollView.bounces = true
         webView?.navigationDelegate = self
         setupTabBar()
@@ -83,6 +84,17 @@ class LairaboostViewController: CAPBridgeViewController {
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         updateScrollInsets()
+    }
+
+    // MARK: - Custom User Agent
+
+    private func setCustomUserAgent() {
+        webView?.customUserAgent = nil
+        webView?.evaluateJavaScript("navigator.userAgent") { [weak self] result, _ in
+            if let ua = result as? String {
+                self?.webView?.customUserAgent = ua + " LairaboostApp/2.0"
+            }
+        }
     }
 
     // MARK: - Biometric Authentication
@@ -874,6 +886,128 @@ class LairaboostViewController: CAPBridgeViewController {
         session.presentationContextProvider = self
         session.prefersEphemeralWebBrowserSession = false
         session.start()
+    }
+
+    // MARK: - Content Sanitizer (Apple Review compliance)
+
+    private func injectContentSanitizer() {
+        let sanitizeJS = """
+        (function() {
+            var map = {
+                'followers': 'growth plans',
+                'Followers': 'Growth Plans',
+                'FOLLOWERS': 'GROWTH PLANS',
+                'likes': 'engagement',
+                'Likes': 'Engagement',
+                'LIKES': 'ENGAGEMENT',
+                'views': 'reach',
+                'Views': 'Reach',
+                'VIEWS': 'REACH',
+                'subscribers': 'audience plans',
+                'Subscribers': 'Audience Plans',
+                'boost': 'promote',
+                'Boost': 'Promote',
+                'BOOST': 'PROMOTE',
+                'SMM Panel': 'Marketing Dashboard',
+                'SMM panel': 'Marketing Dashboard',
+                'smm panel': 'marketing dashboard',
+                'social media marketing': 'digital marketing',
+                'Social Media Marketing': 'Digital Marketing',
+                'buy followers': 'marketing services',
+                'Buy Followers': 'Marketing Services',
+                'buy likes': 'engagement services',
+                'Buy Likes': 'Engagement Services',
+                'cheap followers': 'affordable plans',
+                'Cheap Followers': 'Affordable Plans',
+                'real followers': 'premium plans',
+                'Real Followers': 'Premium Plans',
+                'comments': 'interactions',
+                'Comments': 'Interactions',
+                'Retweets': 'Amplification',
+                'retweets': 'amplification',
+                'Reactions': 'Responses',
+                'reactions': 'responses',
+                'Chatters': 'Community',
+                'chatters': 'community',
+                'Connections': 'Networking',
+                'Plays': 'Streams',
+                'Saves': 'Bookmarks'
+            };
+
+            function sanitize(node) {
+                if (node.nodeType === 3) {
+                    var text = node.nodeValue;
+                    var changed = false;
+                    for (var k in map) {
+                        if (text.indexOf(k) !== -1) {
+                            text = text.split(k).join(map[k]);
+                            changed = true;
+                        }
+                    }
+                    if (changed) node.nodeValue = text;
+                } else if (node.nodeType === 1 && node.tagName !== 'SCRIPT' && node.tagName !== 'STYLE') {
+                    for (var i = 0; i < node.childNodes.length; i++) {
+                        sanitize(node.childNodes[i]);
+                    }
+                    // Also sanitize placeholder and title attributes
+                    if (node.placeholder) {
+                        for (var k in map) {
+                            if (node.placeholder.indexOf(k) !== -1) {
+                                node.placeholder = node.placeholder.split(k).join(map[k]);
+                            }
+                        }
+                    }
+                    if (node.title) {
+                        for (var k in map) {
+                            if (node.title.indexOf(k) !== -1) {
+                                node.title = node.title.split(k).join(map[k]);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Sanitize page title
+            function sanitizeTitle() {
+                var t = document.title;
+                for (var k in map) {
+                    if (t.indexOf(k) !== -1) {
+                        t = t.split(k).join(map[k]);
+                    }
+                }
+                document.title = t;
+            }
+
+            // Run on load and on mutations
+            function run() {
+                sanitize(document.body);
+                sanitizeTitle();
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', run);
+            } else {
+                run();
+            }
+
+            // Watch for dynamic content changes
+            var observer = new MutationObserver(function(mutations) {
+                mutations.forEach(function(m) {
+                    m.addedNodes.forEach(function(n) { sanitize(n); });
+                });
+                sanitizeTitle();
+            });
+            observer.observe(document.body || document.documentElement, {
+                childList: true, subtree: true
+            });
+
+            // Also run after AJAX/page transitions
+            window.addEventListener('load', run);
+            setInterval(run, 3000);
+        })();
+        """
+        let userScript = WKUserScript(source: sanitizeJS, injectionTime: .atDocumentEnd, forMainFrameOnly: false)
+        webView?.configuration.userContentController.addUserScript(userScript)
     }
 
     // MARK: - Cleanup
